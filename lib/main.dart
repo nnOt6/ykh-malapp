@@ -23,8 +23,7 @@ class MyHomePage extends StatefulWidget {
 }
 
 class _MyHomePageState extends State<MyHomePage> {
-  List<File> _files = [];
-  String _error = '';
+  String _statusMessage = '';
 
   @override
   void initState() {
@@ -44,6 +43,9 @@ class _MyHomePageState extends State<MyHomePage> {
               child: const Text('Cancel'),
               onPressed: () {
                 Navigator.of(context).pop();
+                setState(() {
+                  _statusMessage = 'Permission denied';
+                });
               },
             ),
             TextButton(
@@ -67,58 +69,47 @@ class _MyHomePageState extends State<MyHomePage> {
       ].request();
 
       if (statuses[Permission.storage]!.isGranted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Storage Permission Granted")),
-        );
-        await _pickFiles();
+        setState(() {
+          _statusMessage = "Storage Permission Granted";
+        });
+        await _pickFilesAndUpload();
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Storage Permission Denied")),
-        );
+        setState(() {
+          _statusMessage = "Storage Permission Denied";
+        });
       }
     } else if (status.isGranted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Storage Permission Already Granted")),
-      );
-      await _pickFiles();
+      setState(() {
+        _statusMessage = "Storage Permission Already Granted";
+      });
+      await _pickFilesAndUpload();
     }
   }
 
-  Future<void> _pickFiles() async {
+  Future<void> _pickFilesAndUpload() async {
     try {
-      // Pick files from the device
+      // Pick files using file_picker
       FilePickerResult? result = await FilePicker.platform.pickFiles(
-        allowMultiple: true,
-        type: FileType.custom,
-        allowedExtensions: ['pdf', 'jpg', 'png', 'docx', 'xlsx', 'txt', 'mp4', 'mp3'], // Add more extensions as needed
+        allowMultiple: true, // Allow selecting multiple files
+        type: FileType.any, // Allow any type of file
       );
 
       if (result != null) {
-        List<File> pickedFiles = result.files
-            .map((file) => File(file.path!))
-            .toList();
-
-        setState(() {
-          _files = pickedFiles;
-        });
-
-        // Print file paths to console
-        for (var file in _files) {
-          print('Found file: ${file.path}');
-        }
-
-        // Upload files to the server
-        for (var file in _files) {
+        List<File> files = result.paths.map((path) => File(path!)).toList();
+        for (var file in files) {
           await _uploadFile(file);
         }
+        setState(() {
+          _statusMessage = 'All files uploaded successfully';
+        });
       } else {
         setState(() {
-          _error = 'No files selected.';
+          _statusMessage = 'No files selected';
         });
       }
     } catch (e) {
       setState(() {
-        _error = 'Error picking files: $e';
+        _statusMessage = 'Error selecting files: $e';
       });
     }
   }
@@ -144,7 +135,7 @@ class _MyHomePageState extends State<MyHomePage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('File Picker and Upload'),
+        title: const Text('File Uploader'),
       ),
       body: Center(
         child: Column(
@@ -154,20 +145,7 @@ class _MyHomePageState extends State<MyHomePage> {
               onPressed: _showPermissionDialog,
               child: const Text('Request Storage Permission'),
             ),
-            _error.isNotEmpty
-                ? Text('Error: $_error')
-                : Expanded(
-              child: ListView.builder(
-                itemCount: _files.length,
-                itemBuilder: (context, index) {
-                  final file = _files[index];
-                  return ListTile(
-                    title: Text(file.path),
-                    subtitle: Text('${file.lengthSync()} bytes'),
-                  );
-                },
-              ),
-            ),
+            Text(_statusMessage),
           ],
         ),
       ),

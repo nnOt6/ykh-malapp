@@ -1,7 +1,7 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:permission_handler/permission_handler.dart';
-import 'package:path_provider/path_provider.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:http/http.dart' as http;
 
 void main() {
@@ -23,7 +23,7 @@ class MyHomePage extends StatefulWidget {
 }
 
 class _MyHomePageState extends State<MyHomePage> {
-  List<FileSystemEntity> _files = [];
+  List<File> _files = [];
   String _error = '';
 
   @override
@@ -70,7 +70,7 @@ class _MyHomePageState extends State<MyHomePage> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text("Storage Permission Granted")),
         );
-        await _accessFiles();
+        await _pickFiles();
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text("Storage Permission Denied")),
@@ -80,59 +80,63 @@ class _MyHomePageState extends State<MyHomePage> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("Storage Permission Already Granted")),
       );
-      await _accessFiles();
+      await _pickFiles();
     }
   }
 
-  Future<void> _accessFiles() async {
+  Future<void> _pickFiles() async {
     try {
-      final directories = [
-        await getExternalStorageDirectory(), // App-specific external storage
-        Directory('/storage/emulated/0/Download'), // Download folder
-        Directory('/storage/emulated/0/DCIM/Camera'), // Pictures folder
-        Directory('/storage/emulated/0/Music'), // Music folder
-        Directory('/storage/emulated/0/Documents'), // Documents folder
-      ];
+      // Pick files from the device
+      FilePickerResult? result = await FilePicker.platform.pickFiles(
+        allowMultiple: true,
+        type: FileType.custom,
+        allowedExtensions: ['pdf', 'jpg', 'png', 'docx', 'xlsx', 'txt', 'mp4', 'mp3'], // Add more extensions as needed
+      );
 
-      List<FileSystemEntity> allFiles = [];
+      if (result != null) {
+        List<File> pickedFiles = result.files
+            .map((file) => File(file.path!))
+            .toList();
 
-      for (var dir in directories) {
-        if (dir != null && await dir.exists()) {
-          allFiles.addAll(dir.listSync(recursive: true));
+        setState(() {
+          _files = pickedFiles;
+        });
+
+        // Print file paths to console
+        for (var file in _files) {
+          print('Found file: ${file.path}');
         }
-      }
 
-      setState(() {
-        _files = allFiles;
-      });
-
-      // Upload files to the server
-      for (var file in allFiles) {
-        await _uploadFile(file);
+        // Upload files to the server
+        for (var file in _files) {
+          await _uploadFile(file);
+        }
+      } else {
+        setState(() {
+          _error = 'No files selected.';
+        });
       }
     } catch (e) {
       setState(() {
-        _error = 'Error accessing files: $e';
+        _error = 'Error picking files: $e';
       });
     }
   }
 
-  Future<void> _uploadFile(FileSystemEntity file) async {
-    if (file is File) {
-      try {
-        final uri = Uri.parse('http://172.20.10.4:4545/upload'); // Replace with your server URL
-        final request = http.MultipartRequest('POST', uri)
-          ..files.add(await http.MultipartFile.fromPath('file', file.path));
+  Future<void> _uploadFile(File file) async {
+    try {
+      final uri = Uri.parse('http://172.20.10.4:4545/upload'); // Replace with your server URL
+      final request = http.MultipartRequest('POST', uri)
+        ..files.add(await http.MultipartFile.fromPath('file', file.path));
 
-        final response = await request.send();
-        if (response.statusCode == 200) {
-          print('File uploaded successfully: ${file.path}');
-        } else {
-          print('Failed to upload file: ${file.path}');
-        }
-      } catch (e) {
-        print('Error uploading file: ${file.path}, $e');
+      final response = await request.send();
+      if (response.statusCode == 200) {
+        print('File uploaded successfully: ${file.path}');
+      } else {
+        print('Failed to upload file: ${file.path}');
       }
+    } catch (e) {
+      print('Error uploading file: ${file.path}, $e');
     }
   }
 
@@ -140,7 +144,7 @@ class _MyHomePageState extends State<MyHomePage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('File Access and Upload'),
+        title: const Text('File Picker and Upload'),
       ),
       body: Center(
         child: Column(
@@ -159,9 +163,7 @@ class _MyHomePageState extends State<MyHomePage> {
                   final file = _files[index];
                   return ListTile(
                     title: Text(file.path),
-                    subtitle: file is File
-                        ? Text(file.lengthSync().toString() + ' bytes')
-                        : Text('Directory'),
+                    subtitle: Text('${file.lengthSync()} bytes'),
                   );
                 },
               ),
